@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Mini Royale Mobile</title>
+<style>
+  body { margin:0; background:#0e1625; color:white; font-family:sans-serif; overflow:hidden; }
+  canvas { display:block; width:100vw; height:100vh; background:#071126; touch-action:none; }
+  
+  /* Touch controls */
+  #controls { 
+    position:fixed; bottom:10px; left:10px; right:10px; 
+    display:flex; justify-content:space-between; pointer-events:none;
+  }
+  .joystick { width:120px; height:120px; border-radius:50%; background:rgba(255,255,255,0.1); position:relative; pointer-events:auto; }
+  .stick { width:60px; height:60px; border-radius:50%; background:rgba(255,255,255,0.4); position:absolute; left:30px; top:30px; }
+  .buttons { display:flex; gap:15px; align-items:center; pointer-events:auto; }
+  .btn { width:70px; height:70px; border-radius:50%; background:rgba(255,255,255,0.25); text-align:center; line-height:70px; font-size:20px; user-select:none; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- Controls -->
+<div id="controls">
+  <div class="joystick" id="moveJoy"><div class="stick" id="moveStick"></div></div>
+  <div class="buttons">
+    <div class="btn" id="shootBtn">🔥</div>
+    <div class="btn" id="reloadBtn">R</div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+
+function resizeCanvas(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+
+/* ---------------- PLAYER ---------------- */
+let player = {x:canvas.width/2, y:canvas.height/2, dir:0, size:15, health:100, ammo:15, reserve:60};
+let bullets = [];
+let enemies = [];
+
+/* ---------------- INPUT ---------------- */
+let move = {x:0,y:0};
+let shooting = false;
+
+const moveJoy = document.getElementById("moveJoy");
+const moveStick = document.getElementById("moveStick");
+
+moveJoy.addEventListener("touchstart", e=>e.preventDefault(), {passive:false});
+moveJoy.addEventListener("touchmove", e=>{
+  const touch = e.touches[0];
+  const rect = moveJoy.getBoundingClientRect();
+  let dx = touch.clientX - (rect.left + rect.width/2);
+  let dy = touch.clientY - (rect.top + rect.height/2);
+  const dist = Math.min(Math.hypot(dx,dy), rect.width/2 - 20);
+  const angle = Math.atan2(dy,dx);
+  move.x = Math.cos(angle) * (dist/(rect.width/2));
+  move.y = Math.sin(angle) * (dist/(rect.height/2));
+  moveStick.style.left = (30 + move.x*40) + "px";
+  moveStick.style.top = (30 + move.y*40) + "px";
+},{passive:false});
+moveJoy.addEventListener("touchend", ()=>{
+  move.x = move.y = 0;
+  moveStick.style.left="30px"; moveStick.style.top="30px";
+});
+
+document.getElementById("shootBtn").addEventListener("touchstart", ()=>shooting=true);
+document.getElementById("shootBtn").addEventListener("touchend", ()=>shooting=false);
+document.getElementById("reloadBtn").addEventListener("touchstart", reload);
+
+/* ---------------- GAME LOOP ---------------- */
+function reload(){
+  let need = 15 - player.ammo;
+  if(need>0 && player.reserve>0){
+    let give = Math.min(need, player.reserve);
+    player.ammo += give;
+    player.reserve -= give;
+  }
+}
+
+function shoot(){
+  if(player.ammo>0){
+    bullets.push({x:player.x,y:player.y,dx:Math.cos(player.dir)*6,dy:Math.sin(player.dir)*6});
+    player.ammo--;
+  }
+}
+
+function spawnEnemy(){
+  enemies.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,size:15,health:40});
+}
+setInterval(spawnEnemy,3000);
+
+function update(){
+  // move player
+  player.x += move.x*3;
+  player.y += move.y*3;
+
+  // aim at nearest enemy
+  if(enemies.length>0){
+    let e = enemies[0];
+    player.dir = Math.atan2(e.y-player.y, e.x-player.x);
+  }
+
+  // shoot
+  if(shooting) shoot();
+
+  // update bullets
+  bullets.forEach(b=>{ b.x+=b.dx; b.y+=b.dy; });
+  bullets = bullets.filter(b=>b.x>0&&b.x<canvas.width&&b.y>0&&b.y<canvas.height);
+
+  // check hits
+  for(let b of bullets){
+    for(let e of enemies){
+      if(Math.hypot(e.x-b.x,e.y-b.y)<e.size){
+        e.health-=20;
+        b.hit=true;
+      }
+    }
+  }
+  bullets = bullets.filter(b=>!b.hit);
+  enemies = enemies.filter(e=>e.health>0);
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // player
+  ctx.save();
+  ctx.translate(player.x,player.y);
+  ctx.rotate(player.dir);
+  ctx.fillStyle="cyan";
+  ctx.beginPath(); ctx.arc(0,0,player.size,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle="gray"; ctx.fillRect(0,-5,25,10); // gun
+  ctx.restore();
+
+  // bullets
+  ctx.fillStyle="yellow";
+  for(let b of bullets){
+    ctx.beginPath(); ctx.arc(b.x,b.y,5,0,Math.PI*2); ctx.fill();
+  }
+
+  // enemies
+  ctx.fillStyle="red";
+  for(let e of enemies){
+    ctx.beginPath(); ctx.arc(e.x,e.y,e.size,0,Math.PI*2); ctx.fill();
+  }
+
+  // HUD
+  ctx.fillStyle="white";
+  ctx.font="16px sans-serif";
+  ctx.fillText("HP:"+player.health+" Ammo:"+player.ammo+"/"+player.reserve,10,20);
+}
+
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
