@@ -9,24 +9,45 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-start;
     margin: 0;
     font-family: Arial, sans-serif;
     background-color: #222;
     color: #fff;
     height: 100vh;
-    overflow: hidden;
+    overflow-x: hidden;
   }
-  canvas {
+
+  #discussion {
+    background-color: #333;
+    padding: 15px;
+    border: 2px solid #fff;
+    border-radius: 8px;
+    margin: 10px;
+    max-width: 90%;
+  }
+
+  #discussion h2 {
+    margin-top: 0;
+    cursor: pointer;
+  }
+
+  #discussion p {
+    margin: 5px 0;
+  }
+
+  #gameCanvas {
     background-color: #333;
     margin-top: 10px;
     border: 2px solid #fff;
   }
+
   #controls {
     display: flex;
     justify-content: center;
     margin-top: 10px;
+    flex-wrap: wrap;
   }
+
   .btn {
     background-color: #555;
     border: none;
@@ -37,9 +58,11 @@
     border-radius: 5px;
     user-select: none;
   }
+
   .btn:active {
     background-color: #777;
   }
+
   #level-info {
     margin-top: 10px;
     font-size: 20px;
@@ -47,6 +70,33 @@
 </style>
 </head>
 <body>
+
+<div id="discussion">
+  <h2 onclick="toggleDiscussion()">How to Play 🕹️ (Click to Toggle)</h2>
+  <div id="discussion-content">
+    <p>Welcome to <strong>Time Traveler Puzzle</strong>! Your goal is to reach the exit tile without colliding with your past selves.</p>
+    <p><strong>Controls:</strong></p>
+    <ul>
+      <li>Use the <strong>arrow keys</strong> on desktop to move.</li>
+      <li>On mobile, use the <strong>buttons below the grid</strong> to move.</li>
+    </ul>
+    <p><strong>Rules:</strong></p>
+    <ul>
+      <li>You start at the top-left corner and must reach the exit (gold tile).</li>
+      <li>Each level, your previous moves become <strong>time clones</strong> that replay automatically.</li>
+      <li>Colliding with a clone will restart the level.</li>
+      <li>Each new level adds a clone from the previous level, making it more challenging!</li>
+    </ul>
+    <p><strong>Strategy:</strong></p>
+    <ul>
+      <li>Plan your moves carefully to avoid past selves.</li>
+      <li>Think ahead: where you go now will become a clone in the next level!</li>
+      <li>Levels get harder as more clones appear, so patience and observation are key.</li>
+    </ul>
+    <p>Enjoy the challenge and become a master time traveler!</p>
+  </div>
+</div>
+
 <div id="level-info">Level: 1</div>
 <canvas id="gameCanvas"></canvas>
 <div id="controls">
@@ -78,6 +128,13 @@ function resizeCanvas(){
 }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
+
+// Toggle discussion visibility
+function toggleDiscussion(){
+    const content = document.getElementById('discussion-content');
+    if(content.style.display === 'none') content.style.display = 'block';
+    else content.style.display = 'none';
+}
 
 // Start or reset level
 function startLevel(level){
