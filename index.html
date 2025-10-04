@@ -2,168 +2,187 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Mini Royale Mobile</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Time Traveler Puzzle</title>
 <style>
-  body { margin:0; background:#0e1625; color:white; font-family:sans-serif; overflow:hidden; }
-  canvas { display:block; width:100vw; height:100vh; background:#071126; touch-action:none; }
-  
-  /* Touch controls */
-  #controls { 
-    position:fixed; bottom:10px; left:10px; right:10px; 
-    display:flex; justify-content:space-between; pointer-events:none;
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background-color: #222;
+    color: #fff;
+    height: 100vh;
+    overflow: hidden;
   }
-  .joystick { width:120px; height:120px; border-radius:50%; background:rgba(255,255,255,0.1); position:relative; pointer-events:auto; }
-  .stick { width:60px; height:60px; border-radius:50%; background:rgba(255,255,255,0.4); position:absolute; left:30px; top:30px; }
-  .buttons { display:flex; gap:15px; align-items:center; pointer-events:auto; }
-  .btn { width:70px; height:70px; border-radius:50%; background:rgba(255,255,255,0.25); text-align:center; line-height:70px; font-size:20px; user-select:none; }
+  canvas {
+    background-color: #333;
+    margin-top: 10px;
+    border: 2px solid #fff;
+  }
+  #controls {
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
+  }
+  .btn {
+    background-color: #555;
+    border: none;
+    color: white;
+    padding: 15px;
+    margin: 5px;
+    font-size: 18px;
+    border-radius: 5px;
+    user-select: none;
+  }
+  .btn:active {
+    background-color: #777;
+  }
+  #level-info {
+    margin-top: 10px;
+    font-size: 20px;
+  }
 </style>
 </head>
 <body>
-<canvas id="game"></canvas>
-
-<!-- Controls -->
+<div id="level-info">Level: 1</div>
+<canvas id="gameCanvas"></canvas>
 <div id="controls">
-  <div class="joystick" id="moveJoy"><div class="stick" id="moveStick"></div></div>
-  <div class="buttons">
-    <div class="btn" id="shootBtn">🔥</div>
-    <div class="btn" id="reloadBtn">R</div>
-  </div>
+  <button class="btn" onclick="movePlayer(0,-1)">↑</button>
+  <button class="btn" onclick="movePlayer(-1,0)">←</button>
+  <button class="btn" onclick="movePlayer(1,0)">→</button>
+  <button class="btn" onclick="movePlayer(0,1)">↓</button>
 </div>
 
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-resizeCanvas();
-window.addEventListener("resize", resizeCanvas);
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let gridSize = 8;
+let tileSize;
+let levels = 5;
+let currentLevel = 1;
 
+// Player & clone structures
+let player = {x:0, y:0, moves:[]};
+let clones = [];
+let exit = {x:gridSize-1, y:gridSize-1};
+
+// Resize canvas for mobile
 function resizeCanvas(){
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+    let size = Math.min(window.innerWidth, window.innerHeight) * 0.8;
+    canvas.width = size;
+    canvas.height = size;
+    tileSize = canvas.width / gridSize;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// Start or reset level
+function startLevel(level){
+    currentLevel = level;
+    document.getElementById('level-info').innerText = "Level: " + level;
+    player.x = 0; player.y = 0; player.moves = [];
+    clones = [];
+    exit.x = gridSize-1; exit.y = gridSize-1;
+
+    // Load clones from previous levels
+    for(let l=1; l<level; l++){
+        clones.push({moves: [...levelMoves[l-1]], x:0, y:0, step:0});
+    }
+    draw();
 }
 
-/* ---------------- PLAYER ---------------- */
-let player = {x:canvas.width/2, y:canvas.height/2, dir:0, size:15, health:100, ammo:15, reserve:60};
-let bullets = [];
-let enemies = [];
+// Store all player moves per level
+let levelMoves = [];
 
-/* ---------------- INPUT ---------------- */
-let move = {x:0,y:0};
-let shooting = false;
+// Movement function
+function movePlayer(dx, dy){
+    let newX = player.x + dx;
+    let newY = player.y + dy;
+    if(newX>=0 && newX<gridSize && newY>=0 && newY<gridSize){
+        player.x = newX;
+        player.y = newY;
+        player.moves.push({x:newX, y:newY});
+        updateClones();
+        draw();
+        checkExit();
+    }
+}
 
-const moveJoy = document.getElementById("moveJoy");
-const moveStick = document.getElementById("moveStick");
+// Update clone positions
+function updateClones(){
+    clones.forEach(c=>{
+        if(c.step < c.moves.length){
+            c.x = c.moves[c.step].x;
+            c.y = c.moves[c.step].y;
+            c.step++;
+        }
+    });
+}
 
-moveJoy.addEventListener("touchstart", e=>e.preventDefault(), {passive:false});
-moveJoy.addEventListener("touchmove", e=>{
-  const touch = e.touches[0];
-  const rect = moveJoy.getBoundingClientRect();
-  let dx = touch.clientX - (rect.left + rect.width/2);
-  let dy = touch.clientY - (rect.top + rect.height/2);
-  const dist = Math.min(Math.hypot(dx,dy), rect.width/2 - 20);
-  const angle = Math.atan2(dy,dx);
-  move.x = Math.cos(angle) * (dist/(rect.width/2));
-  move.y = Math.sin(angle) * (dist/(rect.height/2));
-  moveStick.style.left = (30 + move.x*40) + "px";
-  moveStick.style.top = (30 + move.y*40) + "px";
-},{passive:false});
-moveJoy.addEventListener("touchend", ()=>{
-  move.x = move.y = 0;
-  moveStick.style.left="30px"; moveStick.style.top="30px";
+// Check collisions & exit
+function checkExit(){
+    // Clone collision
+    for(let c of clones){
+        if(c.x === player.x && c.y === player.y){
+            alert("Hit your past self! Restarting level.");
+            startLevel(currentLevel);
+            return;
+        }
+    }
+    // Reached exit
+    if(player.x === exit.x && player.y === exit.y){
+        levelMoves[currentLevel-1] = [...player.moves];
+        if(currentLevel < levels){
+            alert("Level Complete! Next Level");
+            startLevel(currentLevel+1);
+        } else {
+            alert("Congratulations! You finished all levels.");
+            startLevel(1);
+        }
+    }
+}
+
+// Draw everything
+function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    // Draw grid
+    ctx.strokeStyle = '#555';
+    for(let i=0;i<=gridSize;i++){
+        ctx.beginPath();
+        ctx.moveTo(i*tileSize,0);
+        ctx.lineTo(i*tileSize,canvas.height);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0,i*tileSize);
+        ctx.lineTo(canvas.width,i*tileSize);
+        ctx.stroke();
+    }
+    // Draw exit
+    ctx.fillStyle = 'gold';
+    ctx.fillRect(exit.x*tileSize, exit.y*tileSize, tileSize, tileSize);
+    // Draw clones
+    clones.forEach(c=>{
+        ctx.fillStyle = 'rgba(0,150,255,0.5)';
+        ctx.fillRect(c.x*tileSize, c.y*tileSize, tileSize, tileSize);
+    });
+    // Draw player
+    ctx.fillStyle = 'lime';
+    ctx.fillRect(player.x*tileSize, player.y*tileSize, tileSize, tileSize);
+}
+
+// Keyboard controls
+window.addEventListener('keydown', e=>{
+    if(e.key==='ArrowUp') movePlayer(0,-1);
+    else if(e.key==='ArrowDown') movePlayer(0,1);
+    else if(e.key==='ArrowLeft') movePlayer(-1,0);
+    else if(e.key==='ArrowRight') movePlayer(1,0);
 });
 
-document.getElementById("shootBtn").addEventListener("touchstart", ()=>shooting=true);
-document.getElementById("shootBtn").addEventListener("touchend", ()=>shooting=false);
-document.getElementById("reloadBtn").addEventListener("touchstart", reload);
-
-/* ---------------- GAME LOOP ---------------- */
-function reload(){
-  let need = 15 - player.ammo;
-  if(need>0 && player.reserve>0){
-    let give = Math.min(need, player.reserve);
-    player.ammo += give;
-    player.reserve -= give;
-  }
-}
-
-function shoot(){
-  if(player.ammo>0){
-    bullets.push({x:player.x,y:player.y,dx:Math.cos(player.dir)*6,dy:Math.sin(player.dir)*6});
-    player.ammo--;
-  }
-}
-
-function spawnEnemy(){
-  enemies.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,size:15,health:40});
-}
-setInterval(spawnEnemy,3000);
-
-function update(){
-  // move player
-  player.x += move.x*3;
-  player.y += move.y*3;
-
-  // aim at nearest enemy
-  if(enemies.length>0){
-    let e = enemies[0];
-    player.dir = Math.atan2(e.y-player.y, e.x-player.x);
-  }
-
-  // shoot
-  if(shooting) shoot();
-
-  // update bullets
-  bullets.forEach(b=>{ b.x+=b.dx; b.y+=b.dy; });
-  bullets = bullets.filter(b=>b.x>0&&b.x<canvas.width&&b.y>0&&b.y<canvas.height);
-
-  // check hits
-  for(let b of bullets){
-    for(let e of enemies){
-      if(Math.hypot(e.x-b.x,e.y-b.y)<e.size){
-        e.health-=20;
-        b.hit=true;
-      }
-    }
-  }
-  bullets = bullets.filter(b=>!b.hit);
-  enemies = enemies.filter(e=>e.health>0);
-}
-
-function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  // player
-  ctx.save();
-  ctx.translate(player.x,player.y);
-  ctx.rotate(player.dir);
-  ctx.fillStyle="cyan";
-  ctx.beginPath(); ctx.arc(0,0,player.size,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle="gray"; ctx.fillRect(0,-5,25,10); // gun
-  ctx.restore();
-
-  // bullets
-  ctx.fillStyle="yellow";
-  for(let b of bullets){
-    ctx.beginPath(); ctx.arc(b.x,b.y,5,0,Math.PI*2); ctx.fill();
-  }
-
-  // enemies
-  ctx.fillStyle="red";
-  for(let e of enemies){
-    ctx.beginPath(); ctx.arc(e.x,e.y,e.size,0,Math.PI*2); ctx.fill();
-  }
-
-  // HUD
-  ctx.fillStyle="white";
-  ctx.font="16px sans-serif";
-  ctx.fillText("HP:"+player.health+" Ammo:"+player.ammo+"/"+player.reserve,10,20);
-}
-
-function loop(){
-  update();
-  draw();
-  requestAnimationFrame(loop);
-}
-loop();
+// Start first level
+startLevel(1);
 </script>
 </body>
 </html>
